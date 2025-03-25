@@ -5,10 +5,8 @@
 
 # q:  how should we visualize this info?
 
-# q:  when did guards become the dominant earners in the NBA?  
-
 # q:  using the rsci index, how much money would player ranked x make in his nba career
-#     (via survival analysis)
+
 
 library(tidyverse)
 # load data
@@ -128,7 +126,37 @@ risky <- risky |>
 risky <- risky |>
   mutate(player = gsub("college", "", player))
 
-###### now work on the nba draft combine data #####
+###### now load nba combine data from draft express #####
+
+draftxpr <- draft_combines(years = jump)
+
+# on first glance, this data is fine but the combine year is off
+# for example, Gilbert Arenas was drafted in 2001--I know this because
+# i checked but also because i just know Arizona Guards
+
+#colnames(draftxpr) <- tolower(colnames(draftxpr))
+
+draftxpr <- draftxpr|>
+  rename_with(tolower) |>
+  rename(player = nameplayer) |>
+  dplyr::select(-matches('"')) |>
+  dplyr::select(1:23) |>
+  dplyr::select(-c("namefirst", "namelast", "heightwoshoes", "heightwshoes",
+                   "wingspan", "reachstandingo")) |>
+  mutate(position1 = substr(slugposition, 1, 2),
+         position2 = str_sub(slugposition, -2, -1),
+         yearcombine = yearcombine - 1,
+         player = sapply(player, scrub)) |>
+  mutate(position1 = tolower(gsub("-", "", position1)),
+         position2 = tolower(gsub("-", "", position2))) |>
+  mutate(position2 = trimws(position2, "both"))
+  
+
+
+
+
+
+
 
 
 
