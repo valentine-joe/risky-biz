@@ -12,21 +12,21 @@ library(tidyverse)
 # load data
 
 path <- "C:\\Users\\josep\\OneDrive\\Desktop\\NBA Data\\kaggle\\NBA Salaries(1990-2023).csv"
-df <- read.csv(path, header = T, sep = ",")
+money <- read.csv(path, header = T, sep = ",")
 
-str(df)
+str(money)
 
 # need to validate data:  check against some names to verify accuracy
 # then we will need to remove first column and change player names to lower case
 
-df <- df[-1]
-colnames(df) <- tolower(colnames(df))
+money <- money[-1]
+colnames(money) <- tolower(colnames(money))
 
 # also the names aren't great and too long:  shorten them
 
 newcols <- c("player", "season", "salary", "adj_salary")
-colnames(df) <- newcols
-
+colnames(money) <- newcols
+rm(newcols)
 # remove special characters, etc from
 
 library(stringi)
@@ -41,21 +41,31 @@ scrub <- function(x){
 }
 
 #
-df[1:4] <- lapply(df[1:4], scrub)
+money[1:4] <- lapply(money[1:4], scrub)
 
 #convert col 2 -4 to numeric
-df <- df |>
+money <- money |>
   mutate(across(c(2:4), as.numeric)) |>
   mutate(season = as.integer(season + 1)) # added 1 so the year matches draft & nba finals
 
 # before we reshape the data, get number of unique values in df to compare after
 
-print(n_distinct(df$player))
+print(n_distinct(money$player))
 
 # reshape data from long to wide
 
-master <- reshape(df, timevar = "season", idvar = "player", 
+money <- reshape(money, timevar = "season", idvar = "player", 
               v.names = c("salary", "adj_salary"), direction = "wide")
+
+# since the data has missing values for most entries and is sparse and 
+# hard to see, sum each players adjusted salary to get the total career earnings
+
+money <- money |>
+  rowwise() |>
+  mutate(adj_car_earn = sum(across(starts_with("adj")), na.rm = T),
+         car_earn = sum(across(starts_with("salary")), na.rm = T)) |>
+  mutate(player = trimws(player, "both")) |>
+  select("player", "car_earn", "adj_car_earn")
 
 #now that we know we're still in good shape, let's move fwd
 # now we need to pull in other datasets, including one with names and positions
@@ -124,7 +134,8 @@ risky <- risky |>
 
 # remove 'college' from player column
 risky <- risky |>
-  mutate(player = gsub("college", "", player))
+  mutate(player = gsub("college", "", player),
+         player = trimws(player, "both"))
 
 ###### now load nba combine data from draft express #####
 
@@ -149,7 +160,18 @@ draftxpr <- draftxpr|>
          player = sapply(player, scrub)) |>
   mutate(position1 = tolower(gsub("-", "", position1)),
          position2 = tolower(gsub("-", "", position2))) |>
-  mutate(position2 = trimws(position2, "both"))
+  mutate(position2 = trimws(position2, "both")) |>
+  select(-slugposition) |>
+  relocate(where(is.character), .before = where(is.numeric)) |>
+  mutate(player = trimws(player, "both"))
+  
+#join draftxpr and player_dict
+draftxpr <- draftxpr |> left_join(player_dict, by = "idplayer")
+
+# join risky dataset with money dataset
+risky <- risky |> left_join(money, by = "player")
+
+
   
 
 
