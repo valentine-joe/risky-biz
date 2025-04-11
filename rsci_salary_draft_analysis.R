@@ -7,7 +7,6 @@
 
 # q:  using the rsci index, how much money would player ranked x make in his nba career
 
-
 library(tidyverse)
 # load data
 
@@ -89,6 +88,7 @@ player_dict$player <- sapply(player_dict$player, scrub)
 # then we get the draft combine info and we merge all of that with the dict
 library(rvest)
 
+start_time <- Sys.time()
 jump <- seq(1998, 2022, by = 001)
 site <- paste('https://www.basketball-reference.com/awards/recruit_rankings_',
               jump, '.html', sep="")
@@ -99,6 +99,9 @@ rsciList <- lapply(site, function(i) {
   draft_table <- html_nodes(webpage, 'table')
   draft <- html_table(draft_table)[[1]]
 })
+
+end_time <- Sys.time()
+print(end_time - start_time)
 
 # since there are differing numbers of columns in the list 
 # the early years (1998 etc) have four extra columns in them
@@ -130,12 +133,28 @@ risky <- risky |>
   mutate(rsci = case_when(rsci == 1 ~ rsci,
                           rsci == lag(rsci, 1) ~ (rsci + 1),
                           .default = rsci))
-  #mutate(rsci = ifelse(rsci == lag(rsci, 1), rsci + 1, rsci))
 
 # remove 'college' from player column
 risky <- risky |>
   mutate(player = gsub("college", "", player),
-         player = trimws(player, "both"))
+         player = trimws(player, "both"),
+         drafted = ifelse(draft != "", 1, 0))
+
+
+# there's duplicates in the risky df due to players reclassifying to later class
+# likely same for draftxpr--certain players went back to college or TO college
+# build function to serve both purposes
+
+reclassify <- function(df, x, y=NULL){
+  df <- df |>
+    group_by(df[,c(x,y)]) |>
+    arrange(df[,x], .by_group= TRUE) |>
+    mutate(reclassified = ifelse(n() > 1, 1, 0)) |>
+    slice_tail()
+    return(df)
+}
+
+risky <- reclassify(risky, "player", "college")
 
 ###### now load nba combine data from draft express #####
 
@@ -163,18 +182,41 @@ draftxpr <- draftxpr|>
   mutate(position2 = trimws(position2, "both")) |>
   select(-slugposition) |>
   relocate(where(is.character), .before = where(is.numeric)) |>
-  mutate(player = trimws(player, "both"))
-  
+  mutate(player = trimws(player, "both")) 
+
+# there are duplicates in this df, remove the original
+# i.e. final impression matters most w.r.t. being drafted
+# if it didn't, players wouldn't be back at the combine
+
+draftxpr <- reclassify(draftxpr, "player")
+
+
+
+# draftdupe <- draftxpr |>
+#   filter(duplicated(player))
+# 
+# # now take the rows of draftxpr that aren't in draftdupe, and stack
+# 
+# draftxpr <- draftxpr |>
+#   filter(!player %in% draftdupe$player) |>
+#   rbind(draftdupe)
+# 
+# rm(draftdupe)
+
 #join draftxpr and player_dict
-draftxpr <- draftxpr |> left_join(player_dict, by = "idplayer")
+draftxpr <- draftxpr |> left_join(player_dict, by = "idplayer") |>
+  rename(player = player.x) |>
+  select(-c(player.y, reclassify))
 
 # join risky dataset with money dataset
-risky <- risky |> left_join(money, by = "player")
+risky <- risky |> 
+  left_join(money, by = "player", multiple = "last") |>
+  ungroup()
 
-
+risky[is.na(risky)] <- ""
+# now join risky and draftxpr
   
-
-
+jj <- left_join(risky, draftxpr, by = c("player", "from", "to"))
 
 
 
