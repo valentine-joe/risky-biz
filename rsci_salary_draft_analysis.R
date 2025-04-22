@@ -8,7 +8,44 @@
 # q:  using the rsci index, how much money would player ranked x make in his nba career
 
 library(tidyverse)
+library(rvest)
 # load data
+
+season_range <- seq(1990, 2024, by =001)
+year <- numeric()
+
+for(season in season_range){
+  year <- c(year, paste(season,'-',season +1))
+}
+
+start_time <- Sys.time()
+site <- gsub(" ", "", (paste('https://hoopshype.com/salaries/players/',
+              year, '/', sep = "")))
+
+salaryList <- lapply(site, function(i) {
+  webpage <- read_html(i)
+  Sys.sleep(20)
+  salary_table <- html_nodes(webpage, 'table')
+  salary <- html_table(salary_table)[[1]]
+})
+
+end_time <- Sys.time()
+print(end_time - start_time)
+
+# pull 2024 - 2025 salary data
+
+site <- paste('https://hoopshype.com/salaries/players/')
+
+lastsalaryList <- lapply(site, function(i) {
+  webpage <- read_html(i)
+  Sys.sleep(20)
+  salary_table2 <- html_nodes(webpage, 'table')
+  salary2 <- html_table(salary_table2)[[1]]
+})
+
+
+
+
 
 path <- "C:\\Users\\josep\\OneDrive\\Desktop\\NBA Data\\kaggle\\NBA Salaries(1990-2023).csv"
 money <- read.csv(path, header = T, sep = ",")
@@ -86,7 +123,6 @@ player_dict$player <- sapply(player_dict$player, scrub)
   
 # now we need to scrape the rsci index and draft data from bbref
 # then we get the draft combine info and we merge all of that with the dict
-library(rvest)
 
 start_time <- Sys.time()
 jump <- seq(1998, 2022, by = 001)
@@ -96,8 +132,8 @@ site <- paste('https://www.basketball-reference.com/awards/recruit_rankings_',
 rsciList <- lapply(site, function(i) {
   webpage <- read_html(i)
   Sys.sleep(20)
-  draft_table <- html_nodes(webpage, 'table')
-  draft <- html_table(draft_table)[[1]]
+  rsci_table <- html_nodes(webpage, 'table')
+  draft <- html_table(rsci_table)[[1]]
 })
 
 end_time <- Sys.time()
