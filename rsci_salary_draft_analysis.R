@@ -7,44 +7,48 @@
 
 # q:  using the rsci index, how much money would player ranked x make in his nba career
 
+library(RKaggle)
 library(tidyverse)
-library(rvest)
+money <- RKaggle::get_dataset("loganlauton/nba-players-and-team-data")[[4]] |>
+  rename_with(tolower)
+
+
+
+
+
 # load data
 
-season_range <- seq(1990, 2024, by =001)
-year <- numeric()
-
-for(season in season_range){
-  year <- c(year, paste(season,'-',season +1))
-}
-
-start_time <- Sys.time()
-site <- gsub(" ", "", (paste('https://hoopshype.com/salaries/players/',
-              year, '/', sep = "")))
-
-salaryList <- lapply(site, function(i) {
-  webpage <- read_html(i)
-  Sys.sleep(20)
-  salary_table <- html_nodes(webpage, 'table')
-  salary <- html_table(salary_table)[[1]]
-})
-
-end_time <- Sys.time()
-print(end_time - start_time)
-
-# pull 2024 - 2025 salary data
-
-site <- paste('https://hoopshype.com/salaries/players/')
-
-lastsalaryList <- lapply(site, function(i) {
-  webpage <- read_html(i)
-  Sys.sleep(20)
-  salary_table2 <- html_nodes(webpage, 'table')
-  salary2 <- html_table(salary_table2)[[1]]
-})
-
-
-
+# season_range <- seq(1990, 2025, by =001)
+# year <- numeric()
+# 
+#  for(season in season_range){
+#    year <- c(year, paste(season))
+#  }
+# 
+#  start_time <- Sys.time()
+#  site <- gsub(" ", "", (paste('https://hoopshype.com/salaries/players/?season=',
+#                year, sep = "")))
+# 
+#  salaryList <- lapply(site, function(i) {
+#    webpage <- read_html(i)
+#    Sys.sleep(5)
+#    salary_table <- html_nodes(webpage, 'table')
+#    salary <- html_table(salary_table)[[3]]
+#  })
+# 
+# end_time <- Sys.time()
+# print(end_time - start_time)
+# 
+# # pull 2024 - 2025 salary data
+# 
+# site <- paste('https://hoopshype.com/salaries/players/')
+# 
+# lastsalaryList <- lapply(site, function(i) {
+#   webpage <- read_html(i)
+#   Sys.sleep(20)
+#   salary_table2 <- html_nodes(webpage, 'table')
+#   salary2 <- html_table(salary_table2)[[1]]
+# })
 
 
 path <- "C:\\Users\\josep\\OneDrive\\Desktop\\NBA Data\\kaggle\\NBA Salaries(1990-2023).csv"
@@ -56,7 +60,6 @@ str(money)
 # then we will need to remove first column and change player names to lower case
 
 money <- money[-1]
-colnames(money) <- tolower(colnames(money))
 
 # also the names aren't great and too long:  shorten them
 
@@ -103,35 +106,20 @@ money <- money |>
   mutate(player = trimws(player, "both")) |>
   select("player", "car_earn", "adj_car_earn")
 
-#now that we know we're still in good shape, let's move fwd
-# now we need to pull in other datasets, including one with names and positions
-# can use nbastatR package
-
-library(nbastatR)
-# first we should get a dictionary of players, then their bios
-Sys.setenv(VROOM_CONNECTION_SIZE = 500000)
-player_dict <- nba_players() |>
-  arrange(namePlayer)
-
-colnames(player_dict) <- tolower(colnames(player_dict))
-player_dict <- player_dict |>
-  rename(player = nameplayer, from = yearseasonfirst, to = yearseasonlast) |>
-  mutate(from = from + 1) |>
-  mutate(to = to +1) # need year in and yearout to reflect 2nd half of yr
-
-player_dict$player <- sapply(player_dict$player, scrub)
+# now that we know we're still in good shape, let's move fwd
+# now we need to pull in other datasets, 
   
 # now we need to scrape the rsci index and draft data from bbref
-# then we get the draft combine info and we merge all of that with the dict
+# then we get the draft combine info and we merge all of that together
 
 start_time <- Sys.time()
-jump <- seq(1998, 2022, by = 001)
+jump <- seq(1998, 2025, by = 001)
 site <- paste('https://www.basketball-reference.com/awards/recruit_rankings_',
               jump, '.html', sep="")
 
 rsciList <- lapply(site, function(i) {
   webpage <- read_html(i)
-  Sys.sleep(20)
+  Sys.sleep(5)
   rsci_table <- html_nodes(webpage, 'table')
   draft <- html_table(rsci_table)[[1]]
 })
@@ -192,57 +180,50 @@ reclassify <- function(df, x, y=NULL){
 
 risky <- reclassify(risky, "player", "college")
 
-###### now load nba combine data from draft express #####
+#risky <- risky |> filter(hs_class <= 2022)
 
-draftxpr <- draft_combines(years = jump)
+###### now load predraft measurement data and draft info from bbref #####
 
-# on first glance, this data is fine but the combine year is off
-# for example, Gilbert Arenas was drafted in 2001--I know this because
-# i checked but also because i just know Arizona Guards
 
-#colnames(draftxpr) <- tolower(colnames(draftxpr))
-
-draftxpr <- draftxpr|>
+library(RKaggle)
+draftcomb <- RKaggle::get_dataset("marcusfern/nba-draft-combine") |>
   rename_with(tolower) |>
-  rename(player = nameplayer) |>
-  dplyr::select(-matches('"')) |>
-  dplyr::select(1:23) |>
-  dplyr::select(-c("namefirst", "namelast", "heightwoshoes", "heightwshoes",
-                   "wingspan", "reachstandingo")) |>
-  mutate(position1 = substr(slugposition, 1, 2),
-         position2 = str_sub(slugposition, -2, -1),
-         yearcombine = yearcombine - 1,
-         player = sapply(player, scrub)) |>
-  mutate(position1 = tolower(gsub("-", "", position1)),
-         position2 = tolower(gsub("-", "", position2))) |>
-  mutate(position2 = trimws(position2, "both")) |>
-  select(-slugposition) |>
+  mutate(position1 = substr(pos, 1, 2),
+         position2 = ifelse(nchar(pos) > 2, substr(pos, 4,5), pos)) |>
   relocate(where(is.character), .before = where(is.numeric)) |>
-  mutate(player = trimws(player, "both")) 
+  select(-pos) |>
+  mutate(player = gsub("^(.+)\\s(.+)$", "\\2 \\1", player))
 
-# there are duplicates in this df, remove the original
-# i.e. final impression matters most w.r.t. being drafted
-# if it didn't, players wouldn't be back at the combine
+draftcomb$player <- sapply(draftcomb$player, scrub)
+draftcomb <- reclassify(draftcomb, "player")
 
-draftxpr <- reclassify(draftxpr, "player")
+# now scrape all the nba draft info:  stats stuff
+
+library(tidyverse)
+library(rvest)
+
+jump <- seq(1976, 1980, by = 001)
+site <- paste('https://www.basketball-reference.com/draft/NBA_', jump, '.html', sep="")
+
+dfList <- lapply(site, function(i) {
+  webpage <- read_html(i)
+  Sys.sleep(5)
+  draft_table <- html_nodes(webpage, 'table')
+  draft <- html_table(draft_table)[[1]]
+})
+
+draftdf <- do.call(rbind, dfList)
+
+names(draftdf) <- c("rank", "pick", "team", "player", "college", "years", "gp.tot",
+                    "mp.tot", "pts.tot", "trb.tot", "ast.tot", "fgp", "threepp",
+                    "ftp", "mpg", "ppg", "rpg", "apg", "ws", "ws48", "bpm", "vorp")
+
+draftdf <- draftdf[-1, ]
+draftdf <- draftdf |> filter(player != "" & player != "Player")
 
 
 
-# draftdupe <- draftxpr |>
-#   filter(duplicated(player))
-# 
-# # now take the rows of draftxpr that aren't in draftdupe, and stack
-# 
-# draftxpr <- draftxpr |>
-#   filter(!player %in% draftdupe$player) |>
-#   rbind(draftdupe)
-# 
-# rm(draftdupe)
 
-#join draftxpr and player_dict
-draftxpr <- draftxpr |> left_join(player_dict, by = "idplayer") |>
-  rename(player = player.x) |>
-  select(-c(player.y, reclassify))
 
 # join risky dataset with money dataset
 risky <- risky |> 
@@ -252,7 +233,7 @@ risky <- risky |>
 risky[is.na(risky)] <- ""
 # now join risky and draftxpr
   
-jj <- left_join(risky, draftxpr, by = c("player", "from", "to"))
+jj <- left_join(risky, draftcomb, by = c("player"))
 
 
 
