@@ -9,50 +9,14 @@
 
 library(RKaggle)
 library(tidyverse)
+library(rvest)
+library(stringi)
+library(stringr)
 money <- RKaggle::get_dataset("loganlauton/nba-players-and-team-data")[[4]] |>
   rename_with(tolower)
 
-
-
-
-
-# load data
-
-# season_range <- seq(1990, 2025, by =001)
-# year <- numeric()
-# 
-#  for(season in season_range){
-#    year <- c(year, paste(season))
-#  }
-# 
-#  start_time <- Sys.time()
-#  site <- gsub(" ", "", (paste('https://hoopshype.com/salaries/players/?season=',
-#                year, sep = "")))
-# 
-#  salaryList <- lapply(site, function(i) {
-#    webpage <- read_html(i)
-#    Sys.sleep(5)
-#    salary_table <- html_nodes(webpage, 'table')
-#    salary <- html_table(salary_table)[[3]]
-#  })
-# 
-# end_time <- Sys.time()
-# print(end_time - start_time)
-# 
-# # pull 2024 - 2025 salary data
-# 
-# site <- paste('https://hoopshype.com/salaries/players/')
-# 
-# lastsalaryList <- lapply(site, function(i) {
-#   webpage <- read_html(i)
-#   Sys.sleep(20)
-#   salary_table2 <- html_nodes(webpage, 'table')
-#   salary2 <- html_table(salary_table2)[[1]]
-# })
-
-
-path <- "C:\\Users\\josep\\OneDrive\\Desktop\\NBA Data\\kaggle\\NBA Salaries(1990-2023).csv"
-money <- read.csv(path, header = T, sep = ",")
+# path <- "C:\\Users\\josep\\OneDrive\\Desktop\\NBA Data\\kaggle\\NBA Salaries(1990-2023).csv"
+# money <- read.csv(path, header = T, sep = ",")
 
 str(money)
 
@@ -66,7 +30,7 @@ money <- money[-1]
 newcols <- c("player", "season", "salary", "adj_salary")
 colnames(money) <- newcols
 rm(newcols)
-# remove special characters, etc from
+# remove special characters, etc via function
 
 library(stringi)
 
@@ -180,9 +144,30 @@ reclassify <- function(df, x, y=NULL){
 
 risky <- reclassify(risky, "player", "college")
 
+# note players in risky index who weren't drafted but played in NBA
+
+risky <- risky |>
+  ungroup() |>
+  mutate(across(everything(), as.character)) |>
+  mutate(from = replace_na(from, ""),
+         to = replace_na(to, ""),
+         rd = replace_na(rd, ""),
+         pk = replace_na(pk, ""),
+         ws = replace_na(ws, ""),
+         draft = replace_na(draft, ""),
+         undrafted_played = ifelse(draft == "" & from != "", 1, 0))
+
+risky <- risky |>
+  mutate(across(-c(player, college, team), as.numeric))
+
+# write a copy to a folder
+write.csv(risky, file = "C:\\Users\\josep\\OneDrive\\Desktop\\draft-annals\\rsci_1998_2025")
+
+
+
 #risky <- risky |> filter(hs_class <= 2022)
 
-###### now load predraft measurement data and draft info from bbref #####
+###### now load predraft measurement data and draft info #####
 
 
 library(RKaggle)
