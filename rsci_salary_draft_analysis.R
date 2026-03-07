@@ -1,11 +1,6 @@
-# q:  which school should a good high school prospect go to?
-    # base this on:  total earnings, average earnings, length of career,
-    # but also likelihood information:  probability of making more than X number
-    # do all of this by position, so we can be specific
-
-# q:  how should we visualize this info?
-
-# q:  using the rsci index, how much money would player ranked x make in his nba career
+#q:  do heirs of nba players fare better in the draft?  more likely to be drafted?
+#q:  how does this effect productivity?  
+#q:  how does this effect lifetime earnings?  do they make more? less?
 
 library(RKaggle)
 library(tidyverse)
@@ -129,6 +124,10 @@ risky <- risky |>
          drafted = ifelse(draft != "", 1, 0))
 
 
+# write a copy to a folder
+write.csv(risky, file = "C:\\Users\\josep\\OneDrive\\Desktop\\draft-annals\\rsci_1998_2025.csv")
+
+
 # there's duplicates in the risky df due to players reclassifying to later class
 # likely same for draftxpr--certain players went back to college or TO college
 # build function to serve both purposes
@@ -137,7 +136,7 @@ reclassify <- function(df, x, y=NULL){
   df <- df |>
     group_by(df[,c(x,y)]) |>
     arrange(df[,x], .by_group= TRUE) |>
-    mutate(reclassified = ifelse(n() > 1, 1, 0)) |>
+    mutate(reclassified_down = ifelse(n() > 1, 1, 0))
     slice_tail()
     return(df)
 }
@@ -160,8 +159,7 @@ risky <- risky |>
 risky <- risky |>
   mutate(across(-c(player, college, team), as.numeric))
 
-# write a copy to a folder
-write.csv(risky, file = "C:\\Users\\josep\\OneDrive\\Desktop\\draft-annals\\rsci_1998_2025")
+
 
 
 
@@ -205,6 +203,40 @@ names(draftdf) <- c("rank", "pick", "team", "player", "college", "years", "gp.to
 
 draftdf <- draftdf[-1, ]
 draftdf <- draftdf |> filter(player != "" & player != "Player")
+
+secondgen <- lapply('https://en.wikipedia.org/wiki/List_of_second-generation_NBA_players', function(i) {
+  webpage <- read_html(i)
+  tbl <- html_nodes(webpage, 'table')
+  tbl_first <- html_table(tbl)[[1]]
+})
+
+secondgen <- do.call(rbind.data.frame, secondgen)
+str(secondgen)
+secondgen <- secondgen |> select(1:2) # drop last two columns
+colnames(secondgen) <- lapply(colnames(secondgen), scrub)
+
+secondgen <- secondgen |>
+  mutate(sons = sapply(sons, scrub))
+
+# based on what i can tell there's only a few problem rows: 2, 15, 16, 29, 34, 60, 63, 87--row 2 needs two extra rows after it
+prob_rows <- c(2, 15:16, 29, 34, 60, 63, 87)
+print(prob_rows)
+
+secondgen <- secondgen |>
+  filter(!row_number() %in% prob_rows)
+
+barry <- data.frame(father = rep("Rick Barry", 3), sons = c("jon barry", "brent barry", "drew barry"))
+curry <- data.frame(father = rep("Dell Curry", 2), sons = c("stephen curry", "seth curry"))
+davis <- data.frame(father = rep("Dale Davis", 1), sons = "trayce jackson davis")
+grant <- data.frame(father = rep("Harvey Grant", 2), sons = c("jerami grant", "jerian grant"))
+harper <- data.frame(father = rep("Ron Harper", 2), sons = c("ron harper jr", "dylan harper"))
+nance <- data.frame(father = rep("Larry Nance", 2), sons = c("larry nance jr", "pete nance"))
+paxson <- data.frame(father = rep("Jim Paxson Sr", 2), sons = c("jim paxon jr", "john paxson"))
+thompson <- data.frame(father = rep("Mychal Thompson", 2), sons = c("mychel thompson", "klay thompson"))
+
+addendum <- rbind(barry, curry, davis, grant, harper, nance, paxson, thompson)
+rm(barry, curry, davis, grant, harper, nance, paxson, thompson)
+secondgen <- rbind(secondgen, addendum)
 
 
 
