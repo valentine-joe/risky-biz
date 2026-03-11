@@ -7,27 +7,16 @@ library(tidyverse)
 library(rvest)
 library(stringi)
 library(stringr)
-money <- RKaggle::get_dataset("loganlauton/nba-players-and-team-data")[[4]] |>
-  rename_with(tolower)
 
-# path <- "C:\\Users\\josep\\OneDrive\\Desktop\\NBA Data\\kaggle\\NBA Salaries(1990-2023).csv"
-# money <- read.csv(path, header = T, sep = ",")
+### first things first, let's pull all info on secondgen nba players we can find
 
-str(money)
+secondgen <- lapply('https://en.wikipedia.org/wiki/List_of_second-generation_NBA_players', function(i) {
+  webpage <- read_html(i)
+  tbl <- html_nodes(webpage, 'table')
+  tbl_first <- html_table(tbl)[[1]]
+})
 
-# need to validate data:  check against some names to verify accuracy
-# then we will need to remove first column and change player names to lower case
-
-money <- money[-1]
-
-# also the names aren't great and too long:  shorten them
-
-newcols <- c("player", "season", "salary", "adj_salary")
-colnames(money) <- newcols
-rm(newcols)
-# remove special characters, etc via function
-
-library(stringi)
+# workhorse clean up function for names, etc
 
 scrub <- function(x){
   x <- tolower(x)
@@ -38,36 +27,39 @@ scrub <- function(x){
   return(x)
 }
 
-#
-money[1:4] <- lapply(money[1:4], scrub)
 
-#convert col 2 -4 to numeric
-money <- money |>
-  mutate(across(c(2:4), as.numeric)) |>
-  mutate(season = as.integer(season + 1)) # added 1 so the year matches draft & nba finals
+secondgen <- do.call(rbind.data.frame, secondgen)
+str(secondgen)
+secondgen <- secondgen |> select(1:2) # drop last two columns
+colnames(secondgen) <- lapply(colnames(secondgen), scrub)
 
-# before we reshape the data, get number of unique values in df to compare after
+secondgen <- lapply(secondgen, scrub)
+secondgen <- as.data.frame(secondgen)
 
-print(n_distinct(money$player))
+# based on what i can tell there's only a few problem rows: 2, 15, 16, 29, 34, 60, 63, 87--row 2 needs two extra rows after it
+prob_rows <- c(2, 15:16, 29, 34, 60, 63, 87)
+print(secondgen[prob_rows,])
 
-# reshape data from long to wide
+secondgen <- secondgen |>
+  filter(!row_number() %in% prob_rows)
 
-money <- reshape(money, timevar = "season", idvar = "player", 
-              v.names = c("salary", "adj_salary"), direction = "wide")
+# this part should be in f'n but we'll do it manually for now--we'll clean it up later
+barry <- data.frame(father = rep("Rick Barry", 3), sons = c("jon barry", "brent barry", "drew barry"))
+curry <- data.frame(father = rep("Dell Curry", 2), sons = c("stephen curry", "seth curry"))
+davis <- data.frame(father = rep("Dale Davis", 1), sons = "trayce jackson davis")
+grant <- data.frame(father = rep("Harvey Grant", 2), sons = c("jerami grant", "jerian grant"))
+harper <- data.frame(father = rep("Ron Harper", 2), sons = c("ron harper jr", "dylan harper"))
+nance <- data.frame(father = rep("Larry Nance", 2), sons = c("larry nance jr", "pete nance"))
+paxson <- data.frame(father = rep("Jim Paxson Sr", 2), sons = c("jim paxon jr", "john paxson"))
+thompson <- data.frame(father = rep("Mychal Thompson", 2), sons = c("mychel thompson", "klay thompson"))
 
-# since the data has missing values for most entries and is sparse and 
-# hard to see, sum each players adjusted salary to get the total career earnings
+addendum <- rbind(barry, curry, davis, grant, harper, nance, paxson, thompson)
+rm(barry, curry, davis, grant, harper, nance, paxson, thompson)
+secondgen <- rbind(secondgen, addendum)
 
-money <- money |>
-  rowwise() |>
-  mutate(adj_car_earn = sum(across(starts_with("adj")), na.rm = T),
-         car_earn = sum(across(starts_with("salary")), na.rm = T)) |>
-  mutate(player = trimws(player, "both")) |>
-  select("player", "car_earn", "adj_car_earn")
 
-# now that we know we're still in good shape, let's move fwd
-# now we need to pull in other datasets, 
-  
+write.csv(secondgen, file = "secondgen_nba_2025.csv")
+
 # now we need to scrape the rsci index and draft data from bbref
 # then we get the draft combine info and we merge all of that together
 
@@ -124,10 +116,6 @@ risky <- risky |>
          drafted = ifelse(draft != "", 1, 0))
 
 
-# write a copy to a folder
-write.csv(risky, file = "C:\\Users\\josep\\OneDrive\\Desktop\\draft-annals\\rsci_1998_2025.csv")
-
-
 # there's duplicates in the risky df due to players reclassifying to later class
 # likely same for draftxpr--certain players went back to college or TO college
 # build function to serve both purposes
@@ -136,9 +124,9 @@ reclassify <- function(df, x, y=NULL){
   df <- df |>
     group_by(df[,c(x,y)]) |>
     arrange(df[,x], .by_group= TRUE) |>
-    mutate(reclassified_down = ifelse(n() > 1, 1, 0))
+    mutate(reclassified_down = ifelse(n() > 1, 1, 0)) |>
     slice_tail()
-    return(df)
+  return(df)
 }
 
 risky <- reclassify(risky, "player", "college")
@@ -159,6 +147,59 @@ risky <- risky |>
 risky <- risky |>
   mutate(across(-c(player, college, team), as.numeric))
 
+# write a copy to a 
+write.csv(risky, file = "rsci_1998_2025.csv")
+
+
+
+money <- RKaggle::get_dataset("loganlauton/nba-players-and-team-data")[[4]] |>
+  rename_with(tolower)
+str(money)
+
+# need to validate data:  check against some names to verify accuracy
+# then we will need to remove first column and change player names to lower case
+
+money <- money[-1]
+
+# also the names aren't great and too long:  shorten them
+
+newcols <- c("player", "season", "salary", "adj_salary")
+colnames(money) <- newcols
+rm(newcols)
+# remove special characters, etc via function
+
+
+
+#
+money[1:4] <- lapply(money[1:4], scrub)
+
+#convert col 2 -4 to numeric
+money <- money |>
+  mutate(across(c(2:4), as.numeric)) |>
+  mutate(season = as.integer(season + 1)) # added 1 so the year matches draft & nba finals
+
+# before we reshape the data, get number of unique values in df to compare after
+
+print(n_distinct(money$player))
+
+# reshape data from long to wide
+
+money <- reshape(money, timevar = "season", idvar = "player", 
+              v.names = c("salary", "adj_salary"), direction = "wide")
+
+# since the data has missing values for most entries and is sparse and 
+# hard to see, sum each players adjusted salary to get the total career earnings
+
+money <- money |>
+  rowwise() |>
+  mutate(adj_car_earn = sum(across(starts_with("adj")), na.rm = T),
+         car_earn = sum(across(starts_with("salary")), na.rm = T)) |>
+  mutate(player = trimws(player, "both")) |>
+  select("player", "car_earn", "adj_car_earn")
+
+# now that we know we're still in good shape, let's move fwd
+# now we need to pull in other datasets, 
+  
 
 
 
@@ -204,39 +245,9 @@ names(draftdf) <- c("rank", "pick", "team", "player", "college", "years", "gp.to
 draftdf <- draftdf[-1, ]
 draftdf <- draftdf |> filter(player != "" & player != "Player")
 
-secondgen <- lapply('https://en.wikipedia.org/wiki/List_of_second-generation_NBA_players', function(i) {
-  webpage <- read_html(i)
-  tbl <- html_nodes(webpage, 'table')
-  tbl_first <- html_table(tbl)[[1]]
-})
 
-secondgen <- do.call(rbind.data.frame, secondgen)
-str(secondgen)
-secondgen <- secondgen |> select(1:2) # drop last two columns
-colnames(secondgen) <- lapply(colnames(secondgen), scrub)
 
-secondgen <- secondgen |>
-  mutate(sons = sapply(sons, scrub))
-
-# based on what i can tell there's only a few problem rows: 2, 15, 16, 29, 34, 60, 63, 87--row 2 needs two extra rows after it
-prob_rows <- c(2, 15:16, 29, 34, 60, 63, 87)
-print(prob_rows)
-
-secondgen <- secondgen |>
-  filter(!row_number() %in% prob_rows)
-
-barry <- data.frame(father = rep("Rick Barry", 3), sons = c("jon barry", "brent barry", "drew barry"))
-curry <- data.frame(father = rep("Dell Curry", 2), sons = c("stephen curry", "seth curry"))
-davis <- data.frame(father = rep("Dale Davis", 1), sons = "trayce jackson davis")
-grant <- data.frame(father = rep("Harvey Grant", 2), sons = c("jerami grant", "jerian grant"))
-harper <- data.frame(father = rep("Ron Harper", 2), sons = c("ron harper jr", "dylan harper"))
-nance <- data.frame(father = rep("Larry Nance", 2), sons = c("larry nance jr", "pete nance"))
-paxson <- data.frame(father = rep("Jim Paxson Sr", 2), sons = c("jim paxon jr", "john paxson"))
-thompson <- data.frame(father = rep("Mychal Thompson", 2), sons = c("mychel thompson", "klay thompson"))
-
-addendum <- rbind(barry, curry, davis, grant, harper, nance, paxson, thompson)
-rm(barry, curry, davis, grant, harper, nance, paxson, thompson)
-secondgen <- rbind(secondgen, addendum)
+# add in df with info on reclassified players
 
 
 
