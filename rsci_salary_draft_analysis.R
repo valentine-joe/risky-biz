@@ -124,7 +124,7 @@ reclassify <- function(df, x, y=NULL){
   df <- df |>
     group_by(df[,c(x,y)]) |>
     arrange(df[,x], .by_group= TRUE) |>
-    mutate(reclassified_down = ifelse(n() > 1, 1, 0)) |>
+    mutate(reclassified = ifelse(n() > 1, 1, 0)) |>
     slice_tail()
   return(df)
 }
@@ -147,10 +147,60 @@ risky <- risky |>
 risky <- risky |>
   mutate(across(-c(player, college, team), as.numeric))
 
-# write a copy to a 
+# write a copy to a csv
 write.csv(risky, file = "rsci_1998_2025.csv")
 
+# make df of players who reclassified per risky list
+# these likely reclassiied down.  later players reclassified up
+# there may be a useful distinction between the two
+reclassified_down <- risky |> filter(reclassified == 1)
 
+########### pre draft combine and draft scraping ############
+
+###### now load predraft measurement data and draft info #####
+
+library(RKaggle)
+draftcomb <- RKaggle::get_dataset("marcusfern/nba-draft-combine") |>
+  rename_with(tolower) |>
+  mutate(position1 = substr(pos, 1, 2),
+         position2 = ifelse(nchar(pos) > 2, substr(pos, 4,5), pos)) |>
+  relocate(where(is.character), .before = where(is.numeric)) |>
+  select(-pos) |>
+  mutate(player = gsub("^(.+)\\s(.+)$", "\\2 \\1", player))
+
+draftcomb$player <- sapply(draftcomb$player, scrub)
+draftcomb <- reclassify(draftcomb, "player")
+
+#write to csv for easier loading later
+write.csv(draftcomb, file = "draft_combine_2000_2025.csv")
+
+# now scrape all the nba draft info:  stats stuff
+
+library(tidyverse)
+library(rvest)
+
+jump <- seq(1976, 2024, by = 001)
+site <- paste('https://www.basketball-reference.com/draft/NBA_', jump, '.html', sep="")
+
+dfList <- lapply(site, function(i) {
+  webpage <- read_html(i)
+  Sys.sleep(5)
+  draft_table <- html_nodes(webpage, 'table')
+  draft <- html_table(draft_table)[[1]]
+})
+
+draftdf <- do.call(rbind, dfList)
+
+names(draftdf) <- c("rank", "pick", "team", "player", "college", "years", "gp.tot",
+                    "mp.tot", "pts.tot", "trb.tot", "ast.tot", "fgp", "threepp",
+                    "ftp", "mpg", "ppg", "rpg", "apg", "ws", "ws48", "bpm", "vorp")
+
+draftdf <- draftdf[-1, ]
+draftdf <- draftdf |> filter(player != "" & player != "Player")
+draftdf[c("team", "player", "college")] <- lapply(draftdf[c("team", "player", "college")], scrub)
+draftdf[, c(1,2,6:ncol(draftdf))] <- lapply(draftdf[,c(1,2,6:ncol(draftdf))], as.numeric)
+
+# now pull in the salary dataset
 
 money <- RKaggle::get_dataset("loganlauton/nba-players-and-team-data")[[4]] |>
   rename_with(tolower)
@@ -206,44 +256,7 @@ money <- money |>
 
 #risky <- risky |> filter(hs_class <= 2022)
 
-###### now load predraft measurement data and draft info #####
 
-
-library(RKaggle)
-draftcomb <- RKaggle::get_dataset("marcusfern/nba-draft-combine") |>
-  rename_with(tolower) |>
-  mutate(position1 = substr(pos, 1, 2),
-         position2 = ifelse(nchar(pos) > 2, substr(pos, 4,5), pos)) |>
-  relocate(where(is.character), .before = where(is.numeric)) |>
-  select(-pos) |>
-  mutate(player = gsub("^(.+)\\s(.+)$", "\\2 \\1", player))
-
-draftcomb$player <- sapply(draftcomb$player, scrub)
-draftcomb <- reclassify(draftcomb, "player")
-
-# now scrape all the nba draft info:  stats stuff
-
-library(tidyverse)
-library(rvest)
-
-jump <- seq(1976, 1980, by = 001)
-site <- paste('https://www.basketball-reference.com/draft/NBA_', jump, '.html', sep="")
-
-dfList <- lapply(site, function(i) {
-  webpage <- read_html(i)
-  Sys.sleep(5)
-  draft_table <- html_nodes(webpage, 'table')
-  draft <- html_table(draft_table)[[1]]
-})
-
-draftdf <- do.call(rbind, dfList)
-
-names(draftdf) <- c("rank", "pick", "team", "player", "college", "years", "gp.tot",
-                    "mp.tot", "pts.tot", "trb.tot", "ast.tot", "fgp", "threepp",
-                    "ftp", "mpg", "ppg", "rpg", "apg", "ws", "ws48", "bpm", "vorp")
-
-draftdf <- draftdf[-1, ]
-draftdf <- draftdf |> filter(player != "" & player != "Player")
 
 
 
