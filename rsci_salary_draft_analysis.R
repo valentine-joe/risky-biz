@@ -200,6 +200,9 @@ draftdf <- draftdf |> filter(player != "" & player != "Player")
 draftdf[c("team", "player", "college")] <- lapply(draftdf[c("team", "player", "college")], scrub)
 draftdf[, c(1,2,6:ncol(draftdf))] <- lapply(draftdf[,c(1,2,6:ncol(draftdf))], as.numeric)
 
+# save a copy
+write.csv(file = "draft_info_1976_2024.csv")
+
 # now pull in the salary dataset
 
 money <- RKaggle::get_dataset("loganlauton/nba-players-and-team-data")[[4]] |>
