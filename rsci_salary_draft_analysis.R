@@ -1,4 +1,4 @@
-#q:  do heirs of nba players fare better in the draft?  more likely to be drafted?
+#q:  are heirs of nba players more likely to play in the nba?  more likely to be drafted?
 #q:  how does this effect productivity?  
 #q:  how does this effect lifetime earnings?  do they make more? less?
 
@@ -9,6 +9,8 @@ library(stringi)
 library(stringr)
 
 ### first things first, let's pull all info on secondgen nba players we can find
+
+# this is a decent place to start:
 
 secondgen <- lapply('https://en.wikipedia.org/wiki/List_of_second-generation_NBA_players', function(i) {
   webpage <- read_html(i)
@@ -21,7 +23,7 @@ secondgen <- lapply('https://en.wikipedia.org/wiki/List_of_second-generation_NBA
 scrub <- function(x){
   x <- tolower(x)
   x <- stri_trans_general(x, "Latin-ASCII") # lots of int'l players have weird accents in names
-  x <- gsub("[[:punct:]]", "", x) # getting rid of special chars
+  x <- gsub("[^[:alnum:] -]", "", x) # getting rid of special chars
   x <- trimws(x, "both") # removing special chars created a whitespace, this removes
   #x <- gsub("(?<=\\b\\w)\\s(?=\\w\\b)", "", x, perl = TRUE) # for the AC greens etc
   return(x)
@@ -57,8 +59,10 @@ addendum <- rbind(barry, curry, davis, grant, harper, nance, paxson, thompson)
 rm(barry, curry, davis, grant, harper, nance, paxson, thompson)
 secondgen <- rbind(secondgen, addendum)
 
-
+# 
 write.csv(secondgen, file = "secondgen_nba_2025.csv")
+
+secondgen <- read.csv('secondgen_nba_2025.csv')
 
 # now we need to scrape the rsci index and draft data from bbref
 # then we get the draft combine info and we merge all of that together
@@ -78,7 +82,10 @@ rsciList <- lapply(site, function(i) {
 end_time <- Sys.time()
 print(end_time - start_time)
 
-# since there are differing numbers of columns in the list 
+# pull in saved rsci data:
+
+
+# since there are differing numbers of columns in the list
 # the early years (1998 etc) have four extra columns in them
 # need first 10 columns of a list of dataframes
 rscinames <- tolower(rsciList[[1]][1, 1:10])
@@ -116,8 +123,13 @@ risky <- risky |>
          drafted = ifelse(draft != "", 1, 0))
 
 
+risky <- risky |>
+  mutate(player = gsub("-", " ", player)) |>
+  mutate(player = gsub("\\s+", " ", player))
+
+
 # there's duplicates in the risky df due to players reclassifying to later class
-# likely same for draftxpr--certain players went back to college or TO college
+# likely that certain players went back to college or TO college
 # build function to serve both purposes
 
 reclassify <- function(df, x, y=NULL){
@@ -148,7 +160,9 @@ risky <- risky |>
   mutate(across(-c(player, college, team), as.numeric))
 
 # write a copy to a csv
-write.csv(risky, file = "rsci_1998_2025.csv")
+#write.csv(risky, file = "rsci_1998_2025.csv")
+
+risky <- read.csv('rsci_1998_2025.csv')
 
 # make df of players who reclassified per risky list
 # these likely reclassiied down.  later players reclassified up
@@ -159,49 +173,49 @@ reclassified_down <- risky |> filter(reclassified == 1)
 
 ###### now load predraft measurement data and draft info #####
 
-library(RKaggle)
-draftcomb <- RKaggle::get_dataset("marcusfern/nba-draft-combine") |>
-  rename_with(tolower) |>
-  mutate(position1 = substr(pos, 1, 2),
-         position2 = ifelse(nchar(pos) > 2, substr(pos, 4,5), pos)) |>
-  relocate(where(is.character), .before = where(is.numeric)) |>
-  select(-pos) |>
-  mutate(player = gsub("^(.+)\\s(.+)$", "\\2 \\1", player))
-
-draftcomb$player <- sapply(draftcomb$player, scrub)
-draftcomb <- reclassify(draftcomb, "player")
-
-#write to csv for easier loading later
-write.csv(draftcomb, file = "draft_combine_2000_2025.csv")
+# library(RKaggle)
+# draftcomb <- RKaggle::get_dataset("marcusfern/nba-draft-combine") |>
+#   rename_with(tolower) |>
+#   mutate(position1 = substr(pos, 1, 2),
+#          position2 = ifelse(nchar(pos) > 2, substr(pos, 4,5), pos)) |>
+#   relocate(where(is.character), .before = where(is.numeric)) |>
+#   select(-pos) |>
+#   mutate(player = gsub("^(.+)\\s(.+)$", "\\2 \\1", player))
+# 
+# draftcomb$player <- sapply(draftcomb$player, scrub)
+# draftcomb <- reclassify(draftcomb, "player")
+# 
+# #write to csv for easier loading later
+# write.csv(draftcomb, file = "draft_combine_2000_2025.csv")
 
 # now scrape all the nba draft info:  stats stuff
 
-library(tidyverse)
-library(rvest)
-
-jump <- seq(1976, 2024, by = 001)
-site <- paste('https://www.basketball-reference.com/draft/NBA_', jump, '.html', sep="")
-
-dfList <- lapply(site, function(i) {
-  webpage <- read_html(i)
-  Sys.sleep(5)
-  draft_table <- html_nodes(webpage, 'table')
-  draft <- html_table(draft_table)[[1]]
-})
-
-draftdf <- do.call(rbind, dfList)
-
-names(draftdf) <- c("rank", "pick", "team", "player", "college", "years", "gp.tot",
-                    "mp.tot", "pts.tot", "trb.tot", "ast.tot", "fgp", "threepp",
-                    "ftp", "mpg", "ppg", "rpg", "apg", "ws", "ws48", "bpm", "vorp")
-
-draftdf <- draftdf[-1, ]
-draftdf <- draftdf |> filter(player != "" & player != "Player")
-draftdf[c("team", "player", "college")] <- lapply(draftdf[c("team", "player", "college")], scrub)
-draftdf[, c(1,2,6:ncol(draftdf))] <- lapply(draftdf[,c(1,2,6:ncol(draftdf))], as.numeric)
-
-# save a copy
-write.csv(file = "draft_info_1976_2024.csv")
+# library(tidyverse)
+# library(rvest)
+# 
+# jump <- seq(1976, 2024, by = 001)
+# site <- paste('https://www.basketball-reference.com/draft/NBA_', jump, '.html', sep="")
+# 
+# dfList <- lapply(site, function(i) {
+#   webpage <- read_html(i)
+#   Sys.sleep(5)
+#   draft_table <- html_nodes(webpage, 'table')
+#   draft <- html_table(draft_table)[[1]]
+# })
+# 
+# draftdf <- do.call(rbind, dfList)
+# 
+# names(draftdf) <- c("rank", "pick", "team", "player", "college", "years", "gp.tot",
+#                     "mp.tot", "pts.tot", "trb.tot", "ast.tot", "fgp", "threepp",
+#                     "ftp", "mpg", "ppg", "rpg", "apg", "ws", "ws48", "bpm", "vorp")
+# 
+# draftdf <- draftdf[-1, ]
+# draftdf <- draftdf |> filter(player != "" & player != "Player")
+# draftdf[c("team", "player", "college")] <- lapply(draftdf[c("team", "player", "college")], scrub)
+# draftdf[, c(1,2,6:ncol(draftdf))] <- lapply(draftdf[,c(1,2,6:ncol(draftdf))], as.numeric)
+# 
+# # save a copy
+# write.csv(draftdf, file = "draft_info_1976_2024.csv")
 
 # now pull in the salary dataset
 
@@ -233,17 +247,30 @@ money <- money |>
 
 # before we reshape the data, get number of unique values in df to compare after
 
-print(n_distinct(money$player))
+uniquePlayers <- n_distinct(money$player)
 
 # reshape data from long to wide
 
-money <- reshape(money, timevar = "season", idvar = "player", 
+money <-  data.frame(money)
+
+money$player <- gsub("\\s+", " ", money$player)
+money$season <- gsub("\\s+", " ", money$season)
+
+m1 <- reshape(money, timevar = "season", idvar = "player", 
               v.names = c("salary", "adj_salary"), direction = "wide")
+
+if (uniquePlayers != nrow(money)){
+  print("you have a data error: check your reshape function")
+  stop()
+} else if (uniquePlayers == nrow(money)){
+  print("successfully reshaped data")
+}
+
 
 # since the data has missing values for most entries and is sparse and 
 # hard to see, sum each players adjusted salary to get the total career earnings
 
-money <- money |>
+m1 <- money |>
   rowwise() |>
   mutate(adj_car_earn = sum(across(starts_with("adj")), na.rm = T),
          car_earn = sum(across(starts_with("salary")), na.rm = T)) |>
