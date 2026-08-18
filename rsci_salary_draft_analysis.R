@@ -160,7 +160,7 @@ risky <- risky |>
   mutate(across(-c(player, college, team), as.numeric))
 
 # write a copy to a csv
-#write.csv(risky, file = "rsci_1998_2025.csv")
+write.csv(risky, file = "rsci_1998_2025.csv")
 
 risky <- read.csv('rsci_1998_2025.csv')
 
@@ -173,49 +173,52 @@ reclassified_down <- risky |> filter(reclassified == 1)
 
 ###### now load predraft measurement data and draft info #####
 
-# library(RKaggle)
-# draftcomb <- RKaggle::get_dataset("marcusfern/nba-draft-combine") |>
-#   rename_with(tolower) |>
-#   mutate(position1 = substr(pos, 1, 2),
-#          position2 = ifelse(nchar(pos) > 2, substr(pos, 4,5), pos)) |>
-#   relocate(where(is.character), .before = where(is.numeric)) |>
-#   select(-pos) |>
-#   mutate(player = gsub("^(.+)\\s(.+)$", "\\2 \\1", player))
-# 
-# draftcomb$player <- sapply(draftcomb$player, scrub)
-# draftcomb <- reclassify(draftcomb, "player")
+library(RKaggle)
+draftcomb <- RKaggle::get_dataset("marcusfern/nba-draft-combine") |>
+  rename_with(tolower) |>
+  mutate(position1 = substr(pos, 1, 2),
+         position2 = ifelse(nchar(pos) > 2, substr(pos, 4,5), pos)) |>
+  relocate(where(is.character), .before = where(is.numeric)) |>
+  select(-pos) |>
+  mutate(player = gsub("^(.+)\\s(.+)$", "\\2 \\1", player))
+
+draftcomb$player <- sapply(draftcomb$player, scrub)
+draftcomb <- reclassify(draftcomb, "player")
 # 
 # #write to csv for easier loading later
-# write.csv(draftcomb, file = "draft_combine_2000_2025.csv")
+write.csv(draftcomb, file = "draft_combine_2000_2025.csv")
 
 # now scrape all the nba draft info:  stats stuff
 
-# library(tidyverse)
-# library(rvest)
+library(tidyverse)
+library(rvest)
+
+jump <- seq(1998, 2024, by = 001)
+site <- paste('https://www.basketball-reference.com/draft/NBA_', jump, '.html', sep="")
+
+dfList <- lapply(site, function(i) {
+  webpage <- read_html(i)
+  Sys.sleep(5)
+  draft_table <- html_nodes(webpage, 'table')
+  draft <- html_table(draft_table)[[1]]
+})
+
+draftdf <- do.call(rbind, dfList)
+
+names(draftdf) <- c("rank", "pick", "team", "player", "college", "years", "gp.tot",
+                    "mp.tot", "pts.tot", "trb.tot", "ast.tot", "fgp", "threepp",
+                    "ftp", "mpg", "ppg", "rpg", "apg", "ws", "ws48", "bpm", "vorp")
 # 
-# jump <- seq(1976, 2024, by = 001)
-# site <- paste('https://www.basketball-reference.com/draft/NBA_', jump, '.html', sep="")
-# 
-# dfList <- lapply(site, function(i) {
-#   webpage <- read_html(i)
-#   Sys.sleep(5)
-#   draft_table <- html_nodes(webpage, 'table')
-#   draft <- html_table(draft_table)[[1]]
-# })
-# 
-# draftdf <- do.call(rbind, dfList)
-# 
-# names(draftdf) <- c("rank", "pick", "team", "player", "college", "years", "gp.tot",
-#                     "mp.tot", "pts.tot", "trb.tot", "ast.tot", "fgp", "threepp",
-#                     "ftp", "mpg", "ppg", "rpg", "apg", "ws", "ws48", "bpm", "vorp")
-# 
-# draftdf <- draftdf[-1, ]
-# draftdf <- draftdf |> filter(player != "" & player != "Player")
-# draftdf[c("team", "player", "college")] <- lapply(draftdf[c("team", "player", "college")], scrub)
-# draftdf[, c(1,2,6:ncol(draftdf))] <- lapply(draftdf[,c(1,2,6:ncol(draftdf))], as.numeric)
-# 
+draftdf <- draftdf[-1, ]
+draftdf <- draftdf |> filter(player != "" & player != "Player")
+draftdf[c("team", "player", "college")] <- lapply(draftdf[c("team", "player", "college")], scrub)
+draftdf[, c(1,2,6:ncol(draftdf))] <- lapply(draftdf[,c(1,2,6:ncol(draftdf))], as.numeric)
+draftdf <- draftdf |>
+  filter(player!= "round 2")
+
+
 # # save a copy
-# write.csv(draftdf, file = "draft_info_1976_2024.csv")
+ write.csv(draftdf, file = "draft_info_1998_2024.csv")
 
 # now pull in the salary dataset
 
@@ -256,7 +259,7 @@ money <-  data.frame(money)
 money$player <- gsub("\\s+", " ", money$player)
 money$season <- gsub("\\s+", " ", money$season)
 
-m1 <- reshape(money, timevar = "season", idvar = "player", 
+money <- reshape(money, timevar = "season", idvar = "player", 
               v.names = c("salary", "adj_salary"), direction = "wide")
 
 if (uniquePlayers != nrow(money)){
@@ -270,7 +273,7 @@ if (uniquePlayers != nrow(money)){
 # since the data has missing values for most entries and is sparse and 
 # hard to see, sum each players adjusted salary to get the total career earnings
 
-m1 <- money |>
+money <- money |>
   rowwise() |>
   mutate(adj_car_earn = sum(across(starts_with("adj")), na.rm = T),
          car_earn = sum(across(starts_with("salary")), na.rm = T)) |>
@@ -278,23 +281,7 @@ m1 <- money |>
   select("player", "car_earn", "adj_car_earn")
 
 # now that we know we're still in good shape, let's move fwd
-# now we need to pull in other datasets, 
-  
-
-
-
-
-#risky <- risky |> filter(hs_class <= 2022)
-
-
-
-
-
-# add in df with info on reclassified players
-
-
-
-
+# now we need to merge our datasets
 
 # join risky dataset with money dataset
 risky <- risky |> 
@@ -302,9 +289,10 @@ risky <- risky |>
   ungroup()
 
 risky[is.na(risky)] <- ""
-# now join risky and draftxpr
+# now join draftcomb and draft df
   
-jj <- left_join(risky, draftcomb, by = c("player"))
+draftdf <- draftdf |>
+  left_join(draftcomb, by = "player", multiple = "last")
 
 
 
