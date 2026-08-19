@@ -294,9 +294,40 @@ risky[is.na(risky)] <- ""
 draftdf <- draftdf |>
   left_join(draftcomb, by = "player", multiple = "last")
 
+# pull base nba data from 1975 through 2020 drafts (height, weight, birthdate)
+
+base_nba <- RKaggle::get_dataset("josephvalentine/base-nba-draftee-data-1975-2020-drafts") |>
+  mutate(player = sapply(player, scrub),
+         college = trimws(college, "both"))
+
+base_nba <- as.data.frame(base_nba)
+
+base_nba$player <- as.character(base_nba$pl)
+
+base_nba <- base_nba |>
+  mutate(player = as.character(player)) |>
+  mutate(player = str_replace_all(player, "(?<=\\b\\w)\\s+(?=\\w\\b)", "")) |>
+  mutate(player = trimws(player, "both")) |>
+  mutate(college = trimws(college, "both")) |>
+  mutate(college = str_replace_all(college, "university"))
 
 
+discenfect <- function(df) {
+  df |>
+    mutate(
+      player = player |>
+        as.character() |>
+        str_replace_all("(?<=\\b\\w)\\s+(?=\\w\\b)", "") |>
+        trimws(),
+      
+      college = college |>
+        as.character() |>
+        str_replace_all("university", "") |>
+        trimws()
+    )
+}
 
+base_nba <- discenfect(base_nba)
 
 
 
