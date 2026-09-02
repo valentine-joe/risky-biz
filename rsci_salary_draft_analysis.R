@@ -280,6 +280,10 @@ money <- money |>
   mutate(player = trimws(player, "both")) |>
   select("player", "car_earn", "adj_car_earn")
 
+# save a copy
+
+write.csv(money, file = 'nba_salary_data.csv')
+
 # now that we know we're still in good shape, let's move fwd
 # now we need to merge our datasets
 
@@ -329,9 +333,60 @@ discenfect <- function(df) {
 
 base_nba <- discenfect(base_nba)
 
+write.csv(base_nba, file = "base_nba_data_1976_2020draft.csv")
 
 
 
+
+
+
+#########################################################
+###################### SETUP ############################
+#########################################################
+
+library(RKaggle)
+library(tidyverse)
+library(rvest)
+library(stringi)
+library(stringr)
+
+#########################################################
+################ HELPER FUNCTIONS #######################
+#########################################################
+
+scrub <- function(x){
+  
+  x <- tolower(x)
+  x <- stri_trans_general(x, "Latin-ASCII")
+  x <- gsub("[^[:alnum:] -]", "", x)
+  x <- trimws(x)
+  
+  return(x)
+  
+}
+
+make_key <- function(x){
+  
+  x <- scrub(x)
+  x <- gsub("-", " ", x)
+  x <- gsub("\\s+", " ", x)
+  x <- trimws(x)
+  
+  return(x)
+  
+}
+
+reclassify <- function(df, ...) {
+  
+  df %>%
+    group_by(...) %>%
+    mutate(
+      reclassified = as.integer(n() > 1)
+    ) %>%
+    slice_tail(n = 1) %>%
+    ungroup()
+  
+}
 
 
 
