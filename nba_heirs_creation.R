@@ -754,6 +754,7 @@ master <- master %>%
     
   )
 
+master_old <- master |> filter(hs_class <= 2020)
 
 ############################################################
 #################### SECTION 5 #############################
@@ -770,6 +771,11 @@ master %>%
   )
 
 
+master_old |>
+  summarise(
+    players = n(),
+    secondgen_players = sum(secondgen)
+  )
 ################ Draft Rates ################
 
 draft_results <- master %>%
@@ -782,7 +788,15 @@ draft_results <- master %>%
 
 print(draft_results)
 
+draft_results_b <- master_old |>
+  group_by(secondgen) %>%
+  summarise(
+    n = n(),
+    draft_rate =
+      mean(drafted_flag)
+  )
 
+print(draft_results_b)
 ################ NBA Rates ################
 
 nba_results <- master %>%
@@ -794,7 +808,14 @@ nba_results <- master %>%
 
 print(nba_results)
 
+nba_results_b <- master_old %>%
+  group_by(secondgen) %>%
+  summarise(
+    nba_rate =
+      mean(nba_flag)
+  )
 
+print(nba_results_b)
 ################ Productivity ################
 
 productivity <- master %>%
@@ -1215,9 +1236,9 @@ nba_players <- master_old %>%
   )
 
 
-nba_players <- master_old %>%
-  filter(nba_flag == 1) %>%
-  mutate(
+nba_players <- master_old |>
+  filter(nba_flag == 1) |>
+  dplyr::mutate(
     event =
       ifelse(
         to >= 2024,
@@ -1238,9 +1259,6 @@ summary(games_model)
 library(survival)
 library(survminer)
 
-library(survival)
-library(survminer)
-
 km_fit <- survfit(
   Surv(nba_gp, event) ~ secondgen,
   data = nba_players
@@ -1253,3 +1271,212 @@ ggsurvplot(
   pval = TRUE
 )
 
+summary(km_fit)$table
+
+#log-rank test
+survdiff(
+  Surv(nba_gp, event) ~ secondgen,
+  data = nba_players
+)
+
+cox_model <- coxph(
+  Surv(nba_gp, event) ~
+    secondgen +
+    rsci,
+  data = nba_players
+)
+
+summary(cox_model)
+
+##### bonus:  backing out probabilities of playing in the nba based solely on rsci ran####
+
+nba_probit <- glm(
+  nba_flag ~ rsci,
+  family = binomial(link = "probit"),
+  data = master_old
+)
+
+summary(nba_probit)
+
+library(pscl)
+
+pR2(nba_probit)
+
+pred_df <- data.frame(
+  rsci = 1:100
+)
+
+pred_df$pr_nba <- predict(
+  nba_probit,
+  newdata = pred_df,
+  type = "response"
+)
+
+head(pred_df)
+
+library(ggplot2)
+
+ggplot(
+  pred_df,
+  aes(rsci, pr_nba)
+) +
+  geom_line(size = 1.2) +
+  labs(
+    x = "RSCI Rank",
+    y = "Estimated Probability of NBA Career",
+    title = "Predicted NBA Probability by RSCI Rank"
+  )
+
+nba_probit2 <- glm(
+  nba_flag ~ rsci + secondgen,
+  family = binomial(link = "probit"),
+  data = master_old
+)
+
+summary(nba_probit2)
+
+pR2(nba_probit)
+
+
+pred_heir <- expand.grid(
+  rsci = 1:100,
+  secondgen = 1
+)
+
+pred_nonheir <- expand.grid(
+  rsci = 1:100,
+  secondgen = 0
+)
+
+pred_heir$pr <- predict(
+  nba_probit2,
+  newdata = pred_heir,
+  type = "response"
+)
+
+pred_nonheir$pr <- predict(
+  nba_probit2,
+  newdata = pred_nonheir,
+  type = "response"
+)
+
+
+library(dplyr)
+library(ggplot2)
+
+pred_heir <- pred_heir %>%
+  mutate(group = "NBA Heir")
+
+pred_nonheir <- pred_nonheir %>%
+  mutate(group = "Non-Heir")
+
+pred_plot <- bind_rows(
+  pred_heir,
+  pred_nonheir
+)
+
+ggplot(
+  pred_plot,
+  aes(
+    x = rsci,
+    y = pr,
+    color = group
+  )
+) +
+  geom_line(linewidth = 1.2) +
+  scale_x_reverse() +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  scale_color_manual(
+    values = c(
+      "Non-Heir" = "steelblue",
+      "NBA Heir" = "firebrick"
+    )
+  ) +
+  labs(
+    title = "Predicted Probability of Reaching the NBA",
+    subtitle = "Probit model using RSCI rank and NBA lineage",
+    x = "RSCI Rank (Lower = Better Recruit)",
+    y = "Predicted NBA Probability",
+    color = NULL
+  ) +
+  theme_minimal(base_size = 14)
+
+
+#equivalent rank for heirs and non-heirs
+equiv_rank <- pred_heir %>%
+  rowwise() %>%
+  mutate(
+    equivalent_nonheir_rank =
+      pred_nonheir$rsci[
+        which.min(
+          abs(
+            pred_nonheir$pr - pr
+          )
+        )
+      ]
+  ) %>%
+  ungroup()
+
+# lineage bonus
+equiv_rank <- equiv_rank %>%
+  mutate(
+    lineage_bonus =
+      rsci - equivalent_nonheir_rank
+  )
+
+# build table including nonheir prob and rsci rank
+equiv_rank <- equiv_rank %>%
+  mutate(
+    nonheir_prob =
+      pred_nonheir$pr[
+        match(
+          equivalent_nonheir_rank,
+          pred_nonheir$rsci
+        )
+      ]
+  ) |>
+  ungroup()
+
+### note:  model predicts some heirs have nba probabilities higher than any
+### non-hear can achieve even within the top 100 rsci universe
+
+pred_plot %>%
+  filter(
+    rsci %in% c(1,10,25,50,75,100)
+  ) %>%
+  select(
+    rsci,
+    group,
+    pr
+  )
+
+equiv_heir <- pred_nonheir %>%
+  rowwise() %>%
+  mutate(
+    equivalent_heir_rank =
+      pred_heir$rsci[
+        which.min(
+          abs(
+            pred_heir$pr - pr
+          )
+        )
+      ]
+  ) %>%
+  ungroup()
+
+equiv_heir %>%
+  filter(
+    rsci %in% c(1,10,25,50,75,100)
+  ) %>%
+  select(
+    nonheir_rank = rsci,
+    nba_prob = pr,
+    equivalent_heir_rank
+  )
+
+# based on the probit model 2, an nba heir ranked approx 75th has a
+# similar predicted probability of reaching the NBA as a non-heir ranked
+# approximately 25th.  Across much of the RSCI distribution NBA lineage
+# appears equivalent to roughly 50 ranking positions.
