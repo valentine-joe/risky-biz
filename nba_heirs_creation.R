@@ -1273,6 +1273,7 @@ ggsurvplot(
 
 summary(km_fit)$table
 
+summary(km_fit, times = c(82, 150, 300, 600, 820))
 #log-rank test
 survdiff(
   Surv(nba_gp, event) ~ secondgen,
@@ -1476,7 +1477,298 @@ equiv_heir %>%
     equivalent_heir_rank
   )
 
-# based on the probit model 2, an nba heir ranked approx 75th has a
+# based on the probit model 2, an nba heir ranked approx 77th has a
 # similar predicted probability of reaching the NBA as a non-heir ranked
 # approximately 25th.  Across much of the RSCI distribution NBA lineage
-# appears equivalent to roughly 50 ranking positions.
+# appears equivalent to roughly 50 ranking positions. In other words,
+# the effect of NBA lineage is roughly equivalent to a 50 point improvement
+# in one's RSCI recruiting rank.  This advantage largely disappears 
+# when looking at NBA productivity, career longevity, and career earnings
+# among players who successfully reach the league.
+
+
+##  Other viz ##
+# earnings density#
+ggplot(
+  nba_players,
+  aes(
+    x = log_earnings,
+    fill = factor(secondgen)
+  )
+) +
+  geom_density(alpha = .4) +
+  scale_fill_manual(
+    values = c(
+      "steelblue",
+      "firebrick"
+    ),
+    labels = c(
+      "Non-Heir",
+      "NBA Heir"
+    )
+  ) +
+  labs(
+    x = "Log Career Earnings",
+    y = "Density",
+    fill = NULL
+  ) +
+  theme_minimal()
+
+# earnings ecdf#
+ggplot(
+  nba_players,
+  aes(
+    x = adj_car_earn,
+    color = factor(secondgen)
+  )
+) +
+  stat_ecdf(size = 1.1) +
+  scale_x_log10() +
+  labs(
+    x = "Inflation-Adjusted Career Earnings",
+    y = "Cumulative Probability",
+    color = NULL
+  ) +
+  theme_minimal()
+
+# win shares density #
+ggplot(
+  nba_players,
+  aes(
+    x = nba_ws,
+    fill = factor(secondgen)
+  )
+) +
+  geom_density(alpha = .4) +
+  labs(
+    x = "Career Win Shares",
+    y = "Density"
+  ) +
+  theme_minimal()
+
+# vorp density #
+
+ggplot(
+  nba_players,
+  aes(
+    x = nba_vorp,
+    fill = factor(secondgen)
+  )
+) +
+  geom_density(alpha = .4)
+
+# win shares violin plot #
+
+ggplot(
+  nba_players,
+  aes(
+    factor(secondgen),
+    nba_ws,
+    fill = factor(secondgen)
+  )
+) +
+  geom_violin() +
+  geom_boxplot(
+    width = .10,
+    fill = "white"
+  ) +
+  labs(
+    x = "",
+    y = "Career Win Shares"
+  )
+
+# earnings violin plot #
+
+ggplot(
+  nba_players,
+  aes(
+    factor(secondgen),
+    log_earnings,
+    fill = factor(secondgen)
+  )
+) +
+  geom_violin() +
+  geom_boxplot(
+    width = .10,
+    fill = "white"
+  )
+
+#looking at the pipeline
+
+pipeline_df <- tibble::tribble(
+  ~stage,              ~estimate,
+  "Combine Invite",    coef(combine_model)["secondgen"],
+  "NBA Attainment",    coef(nba_model7)["secondgen"],
+  "Combine Sample NBA",coef(nba_model6)["secondgen"]
+) %>%
+  mutate(
+    odds_ratio = exp(estimate)
+  )
+
+pipeline_df <- tibble(
+  stage = c(
+    "Combine Invite",
+    "NBA Attainment",
+    "Combine Sample NBA"
+  ),
+  
+  estimate = c(
+    coef(combine_model)["secondgen"],
+    coef(nba_model7)["secondgen"],
+    coef(nba_model6)["secondgen"]
+  ),
+  
+  lower = c(
+    confint(combine_model)["secondgen",1],
+    confint(nba_model7)["secondgen",1],
+    confint(nba_model6)["secondgen",1]
+  ),
+  
+  upper = c(
+    confint(combine_model)["secondgen",2],
+    confint(nba_model7)["secondgen",2],
+    confint(nba_model6)["secondgen",2]
+  )
+) %>%
+  mutate(
+    odds_ratio = exp(estimate),
+    lower_or = exp(lower),
+    upper_or = exp(upper)
+  )
+
+ggplot(
+  pipeline_df,
+  aes(
+    x = stage,
+    y = odds_ratio
+  )
+) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(
+      ymin = lower_or,
+      ymax = upper_or
+    ),
+    width = .1
+  ) +
+  geom_hline(
+    yintercept = 1,
+    linetype = "dashed"
+  ) +
+  labs(
+    y = "Odds Ratio for Second-Generation Players",
+    x = NULL,
+    title = "Lineage Effects Across the Basketball Pipeline"
+  ) +
+  coord_flip()
+
+# raw rates
+
+raw_rates <- master_old %>%
+  group_by(rsci, secondgen) %>%
+  summarise(
+    nba_rate = mean(nba_flag),
+    n = n(),
+    .groups = "drop"
+  )
+
+library(zoo)
+
+raw_rates <- raw_rates %>%
+  arrange(secondgen, rsci) %>%
+  group_by(secondgen) %>%
+  mutate(
+    smooth_rate =
+      rollmean(
+        nba_rate,
+        k = 10,
+        fill = NA,
+        align = "center"
+      )
+  )
+
+library(ggplot2)
+
+ggplot(
+  raw_rates,
+  aes(
+    x = rsci,
+    y = nba_rate,
+    color = factor(secondgen)
+  )
+) +
+  geom_point(alpha = .3) +
+  geom_smooth(
+    method = "loess",
+    se = FALSE,
+    linewidth = 1.2
+  ) +
+  scale_color_manual(
+    values = c(
+      "0" = "steelblue",
+      "1" = "firebrick"
+    ),
+    labels = c(
+      "Non-Heir",
+      "NBA Heir"
+    )
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  scale_x_reverse() +
+  labs(
+    title = "Observed NBA Transition Rates by RSCI Rank",
+    subtitle = "LOESS-smoothed empirical transition probabilities",
+    x = "RSCI Rank (Lower = Better)",
+    y = "NBA Attainment Rate",
+    color = NULL
+  ) +
+  theme_minimal(base_size = 14)
+
+library(zoo)
+
+raw_rates_smooth <- raw_rates %>%
+  arrange(secondgen, rsci) %>%
+  group_by(secondgen) %>%
+  mutate(
+    smooth_rate =
+      rollmean(
+        nba_rate,
+        k = 10,
+        fill = NA,
+        align = "center"
+      )
+  )
+
+ggplot(
+  raw_rates_smooth,
+  aes(
+    x = rsci,
+    y = smooth_rate,
+    color = factor(secondgen)
+  )
+) +
+  geom_line(linewidth = 1.2) +
+  scale_x_reverse() +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  scale_color_manual(
+    values = c(
+      "0" = "steelblue",
+      "1" = "firebrick"
+    ),
+    labels = c(
+      "Non-Heir",
+      "NBA Heir"
+    )
+  ) +
+  labs(
+    title = "Observed NBA Transition Rates by RSCI Rank",
+    subtitle = "10-rank moving average",
+    x = "RSCI Rank",
+    y = "Observed NBA Rate",
+    color = NULL
+  ) +
+  theme_minimal(base_size = 14)
