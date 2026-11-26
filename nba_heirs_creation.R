@@ -39,24 +39,16 @@ scrub <- function(x){
   x <- stri_trans_general(x, "Latin-ASCII")
   x <- gsub("[^[:alnum:] -]", "", x)
   x <- trimws(x)
-  
   return(x)
-  
 }
 
-
 make_key <- function(x){
-  
   x <- scrub(x)
-  
   x <- gsub("-", " ", x)
   x <- gsub("\\s+", " ", x)
   x <- trimws(x)
-  
   return(x)
-  
 }
-
 
 reclassify <- function(df, ...) {
   
@@ -70,7 +62,6 @@ reclassify <- function(df, ...) {
   
 }
 
-
 ############################################################
 ############### SECTION 1: SECOND-GEN DATA #################
 ############################################################
@@ -78,108 +69,41 @@ reclassify <- function(df, ...) {
 secondgen <- lapply(
   "https://en.wikipedia.org/wiki/List_of_second-generation_NBA_players",
   function(i){
-    
     webpage <- read_html(i)
-    
     tbl <- html_nodes(webpage, "table")
-    
     html_table(tbl)[[1]]
-    
   }
 )
 
 secondgen <- do.call(rbind.data.frame, secondgen)
-
-secondgen <- secondgen %>%
-  select(1:2)
-
+str(secondgen)
+secondgen <- secondgen |> select(1:2) # drop last two columns
 colnames(secondgen) <- lapply(colnames(secondgen), scrub)
 
 secondgen <- lapply(secondgen, scrub)
 secondgen <- as.data.frame(secondgen)
 
-prob_rows <- c(2, 15:16, 29, 34, 60, 63, 87)
+# based on what i can tell there's only a few problem rows: 2, 17, 18, 31, 36, 62, 65, 89--row 2 needs two extra rows after it
+# and row 17 needs another row after it
+prob_rows <- c(2, 17:18, 31, 36, 62, 65, 89)
+print(secondgen[prob_rows,])
 
-secondgen <- secondgen %>%
+secondgen <- secondgen |>
   filter(!row_number() %in% prob_rows)
 
-barry <- data.frame(
-  father = rep("Rick Barry",3),
-  sons = c(
-    "jon barry",
-    "brent barry",
-    "drew barry"
-  )
-)
+# this part should be in f'n but we'll do it manually for now--we'll clean it up later
+barry <- data.frame(father = rep("Rick Barry", 3), sons = c("jon barry", "brent barry", "drew barry"))
+curry <- data.frame(father = rep("Dell Curry", 2), sons = c("stephen curry", "seth curry"))
+davis <- data.frame(father = rep("Dale Davis", 1), sons = "trayce jackson davis")
+grant <- data.frame(father = rep("Harvey Grant", 2), sons = c("jerami grant", "jerian grant"))
+harper <- data.frame(father = rep("Ron Harper", 2), sons = c("ron harper jr", "dylan harper"))
+nance <- data.frame(father = rep("Larry Nance", 2), sons = c("larry nance jr", "pete nance"))
+paxson <- data.frame(father = rep("Jim Paxson Sr", 2), sons = c("jim paxon jr", "john paxson"))
+thompson <- data.frame(father = rep("Mychal Thompson", 2), sons = c("mychel thompson", "klay thompson"))
 
-curry <- data.frame(
-  father = rep("Dell Curry",2),
-  sons = c(
-    "stephen curry",
-    "seth curry"
-  )
-)
-
-davis <- data.frame(
-  father = "Dale Davis",
-  sons = "trayce jackson davis"
-)
-
-grant <- data.frame(
-  father = rep("Harvey Grant",2),
-  sons = c(
-    "jerami grant",
-    "jerian grant"
-  )
-)
-
-harper <- data.frame(
-  father = rep("Ron Harper",2),
-  sons = c(
-    "ron harper jr",
-    "dylan harper"
-  )
-)
-
-nance <- data.frame(
-  father = rep("Larry Nance",2),
-  sons = c(
-    "larry nance jr",
-    "pete nance"
-  )
-)
-
-paxson <- data.frame(
-  father = rep("Jim Paxson Sr",2),
-  sons = c(
-    "jim paxson jr",
-    "john paxson"
-  )
-)
-
-thompson <- data.frame(
-  father = rep("Mychal Thompson",2),
-  sons = c(
-    "mychel thompson",
-    "klay thompson"
-  )
-)
-
-addendum <- rbind(
-  barry,
-  curry,
-  davis,
-  grant,
-  harper,
-  nance,
-  paxson,
-  thompson
-)
-
-secondgen <- rbind(
-  secondgen,
-  addendum
-)
+addendum <- rbind(barry, curry, davis, grant, harper, nance, paxson, thompson)
+rm(barry, curry, davis, grant, harper, nance, paxson, thompson)
+secondgen <- rbind(secondgen, addendum)
 
 secondgen <- secondgen %>%
   mutate(
@@ -208,15 +132,10 @@ site <- paste0(
 rsciList <- lapply(
   site,
   function(i){
-    
     webpage <- read_html(i)
-    
     Sys.sleep(5)
-    
     rsci_table <- html_nodes(webpage,"table")
-    
     html_table(rsci_table)[[1]]
-    
   }
 )
 
@@ -226,33 +145,13 @@ rscinames <- tolower(
 
 risky <- lapply(rsciList, as.data.frame)
 
-risky <- lapply(
-  risky,
-  setNames,
-  rscinames
-)
+risky <- lapply(risky,setNames,rscinames)
 
-risky <- lapply(
-  risky,
-  "[",
-  ,
-  1:10
-)
+risky <- lapply(risky, "[", , 1:10)
 
-risky <- mapply(
-  cbind,
-  risky,
-  hs_class = jump,
-  SIMPLIFY = FALSE
-)
+risky <- mapply(cbind, risky, "hs_class" = jump, SIMPLIFY = F)
 
-risky <- lapply(
-  risky,
-  function(x){
-    x[x$player != "" &
-        x$player != "Player",]
-  }
-)
+risky <- lapply(risky, function(x) {x <- x[x$player != "" & x$player != "Player",]})
 
 risky <- do.call(
   rbind,
@@ -320,6 +219,9 @@ risky <- risky %>%
   )
         
 rsci_universe <- risky
+
+rsci_universe <- rsci_universe |>
+  mutate(draft_flag = ifelse(draft!= "", 1, 0))
 
 
 ############################################################
@@ -390,8 +292,10 @@ dfList <- lapply(
       "table"
     )
     
-    html_table(draft_table)[[1]]
+    draft <- html_table(draft_table)[[1]]
+    draft$draftyear <- as.numeric(stringr::str_extract(i, "\\d{4}"))
     
+    draft
   }
 )
 
@@ -399,6 +303,8 @@ draftdf <- do.call(
   rbind,
   dfList
 )
+
+
 
 names(draftdf) <- c(
   "rank","pick","team",
@@ -415,12 +321,10 @@ names(draftdf) <- c(
 
 draftdf <- draftdf[-1,]
 
+names(draftdf)[23] <- "draftyear"
+
 draftdf <- draftdf %>%
-  filter(
-    player != "",
-    player != "Player",
-    player != "round 2"
-  )
+  filter( player != "" & player != "Player" & player!= "Round 2")
 
 draftdf$player <- make_key(
   draftdf$player
@@ -488,10 +392,16 @@ draft_features <- draftdf %>%
 
 
 draft_features <- draft_features %>%
-  select(
-    -player,
-    -college
-  )
+  rename(player_draft_df = player,
+         college_draft_df = college)
+
+  # select(
+  #   -player,
+  #   -college
+  
+
+draft_features <- draft_features |>
+  mutate(draft_flag = ifelse(pick!= "", 1, 0))
 ############################################################
 ################### SALARY DATA ############################
 ############################################################
@@ -534,6 +444,8 @@ money <- money %>%
   mutate(
     season = season + 1
   )
+
+money$player <- gsub("-", " ", money$player)
 
 ############################################################
 ################### DIAGNOSTICS ############################
@@ -652,12 +564,12 @@ master <- rsci_universe %>%
   
   left_join(
     sg_lookup,
-    by = "player"
+    by = c("player")
   ) %>%
   
   left_join(
     draft_features,
-    by = "player_college"
+    by = c("player_college", "draft_flag")
   ) %>%
   
   left_join(
@@ -682,14 +594,6 @@ master <- master %>%
     drafted_flag =
       ifelse(
         !is.na(pick),
-        1,
-        0
-      ),
-    
-    nba_flag =
-      ifelse(
-        !is.na(gp.tot) &
-          gp.tot > 0,
         1,
         0
       ),
@@ -729,14 +633,6 @@ master <- master %>%
     )
   )
 
-
-write.csv(
-  master,
-  "master_nba_lineage_analysis.csv",
-  row.names = FALSE
-)
-
-
 master <- master %>%
   rename(
     
@@ -754,7 +650,126 @@ master <- master %>%
     
   )
 
-master_old <- master |> filter(hs_class <= 2020)
+master <- master |>
+  mutate(    nba_flag = as.integer(
+    ifelse(!is.na(from) | (!is.na(nba_gp) & nba_gp > 0),
+           1, 0)
+          )
+        )
+
+# flag guys who were drafted after the data ends, in 2022
+master <- master |>
+  mutate(salary_censored = ifelse(draft_flag == 1 & draftyear >= 2022, 1, 0))
+
+master <- master |>
+  mutate(salary_missing = ifelse(draft_flag == 1 & is.na(adj_car_earn), 1, 0))
+
+master <- master |>
+  mutate( salary_missing_type =
+      case_when(
+        salary_censored == 1 ~ "panel_censored",
+        salary_missing == 1 ~ "other_missing",
+        TRUE ~ "observed"
+      )
+  )
+
+
+write.csv(
+  master,
+  "master_nba_lineage_analysis.csv",
+  row.names = FALSE
+)
+master_old <- master |> filter(hs_class <= 2020) |>
+  filter(!(player == "devin booker" & draft_flag == 0))
+
+missing_before <- master_old %>%
+  filter(
+    draft_flag == 1,
+    is.na(adj_car_earn)
+  ) %>%
+  distinct(player)
+
+n_missing_before <- nrow(missing_before)
+
+print(n_missing_before)
+
+
+player_crosswalk <- tribble(
+  ~alias,                  ~canonical,
+  
+  "henry walker",          "bill walker",
+  
+  "bj boston",             "brandon boston jr",
+  "brandon boston jr",     "brandon boston jr",
+  
+  "cam thomas",            "cameron thomas",
+  "cameron thomas",        "cameron thomas",
+  
+  "kj martin",             "kenyon martin jr",
+  "kenyon martin jr",      "kenyon martin jr",
+  
+  "kz okpala",             "kezie okpala",
+  "kezie okpala",          "kezie okpala",
+  
+  "mo bamba",              "mohamed bamba",
+  "mohamed bamba",         "mohamed bamba",
+  
+  "bones hyland",          "nahshon hyland",
+  "nahshon hyland",        "nahshon hyland",
+  
+  "trayce jackson-davis",  "trayce jackson davis",
+  "trayce jackson davis",  "trayce jackson davis",
+  
+  "jaren jackson jr",      "jaren jackson",
+  "jaren jackson",         "jaren jackson",
+  
+  "wendell moore jr",      "wendell moore",
+  "wendell moore",         "wendell moore",
+  
+  "michael porter",        "michael porter jr",
+  "michael porter jr",     "michael porter jr",
+  
+  "marvin bagley",         "marvin bagley iii",
+  "marvin bagley iii",     "marvin bagley iii",
+  
+  "bj mullens",            "byron mullens",
+  "byron mullens",         "byron mullens",
+  
+  "chris mccollough",      "chris mccullough",
+  
+  "jeffery taylor",        "jeff taylor",
+  
+  "kevin porter",          "kevin porter jr",
+  
+  "moe harkless",          "maurice harkless",
+  
+  "maurice williams",      "mo williams",
+  
+)
+
+apply_crosswalk <- function(x){
+  
+  tmp <- tibble(player = x) %>%
+    left_join(
+      player_crosswalk,
+      by = c("player" = "alias")
+    ) %>%
+    mutate(
+      player = coalesce(canonical, player)
+    )
+  
+  tmp$player
+  
+}
+
+money$player <- apply_crosswalk(money$player)
+
+draftdf$player <- apply_crosswalk(draftdf$player)
+
+draftcomb$player <- apply_crosswalk(draftcomb$player)
+
+sg_lookup$player <- apply_crosswalk(sg_lookup$player)
+
 
 ############################################################
 #################### SECTION 5 #############################
@@ -783,7 +798,7 @@ draft_results <- master %>%
   summarise(
     n = n(),
     draft_rate =
-      mean(drafted_flag)
+      mean(draft_flag)
   )
 
 print(draft_results)
@@ -793,7 +808,7 @@ draft_results_b <- master_old |>
   summarise(
     n = n(),
     draft_rate =
-      mean(drafted_flag)
+      mean(draft_flag)
   )
 
 print(draft_results_b)
@@ -819,7 +834,7 @@ print(nba_results_b)
 ################ Productivity ################
 
 productivity <- master %>%
-  filter(nba_flag == 1) %>%
+  filter(draft_flag == 1) %>%
   group_by(secondgen) %>%
   summarise(
     avg_ws = mean(nba_ws, na.rm = TRUE),
@@ -830,7 +845,17 @@ productivity <- master %>%
 
 print(productivity)
 
+productivity_b <- master_old %>%
+  filter(draft_flag == 1) %>%
+  group_by(secondgen) %>%
+  summarise(
+    avg_ws = mean(nba_ws, na.rm = TRUE),
+    median_ws = median(nba_ws, na.rm = TRUE),
+    avg_vorp = mean(nba_vorp, na.rm = TRUE),
+    avg_bpm = mean(nba_bpm, na.rm = TRUE)
+  )
 
+print(productivity_b)
 
 ############## rsci tier #################
 
@@ -841,15 +866,31 @@ master %>%
     median_rsci = median(rsci, na.rm = TRUE)
   )
 
-
+master_old |>
+  group_by(secondgen) %>%
+  summarise(
+    avg_rsci = mean(rsci, na.rm = TRUE),
+    median_rsci = median(rsci, na.rm = TRUE)
+  )
+  
+  
 master %>%
   group_by(rsci_tier, secondgen) %>%
   summarise(
     n = n(),
-    drafted = sum(drafted_flag),
-    draft_rate = mean(drafted_flag),
+    drafted = sum(draft_flag),
+    draft_rate = mean(draft_flag),
     .groups = "drop"
     )
+
+master_old %>%
+  group_by(rsci_tier, secondgen) %>%
+  summarise(
+    n = n(),
+    drafted = sum(draft_flag),
+    draft_rate = mean(draft_flag),
+    .groups = "drop"
+  )
 
 
 master <- master %>%
@@ -873,6 +914,17 @@ tier_results <- master %>%
 
 print(tier_results)
 
+tier_results_b <- master_old %>%
+  group_by(rsci_tier, secondgen) %>%
+  summarise(
+    n = n(),
+    nba_rate = mean(nba_flag),
+    .groups = "drop"
+  )
+
+print(tier_results_b)
+
+
 ggplot(
   tier_results,
   aes(
@@ -888,7 +940,20 @@ ggplot(
     labels = scales::percent
   )
 
-
+ggplot(
+  tier_results_b,
+  aes(
+    rsci_tier,
+    nba_rate,
+    fill = factor(secondgen)
+  )
+) +
+  geom_col(
+    position = "dodge"
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
 
 
 ######## use being drafted rather than simply playing in nba
@@ -896,7 +961,14 @@ ggplot(
 master %>%
   group_by(rsci_tier, secondgen) %>%
   summarise(
-    draft_rate = mean(drafted_flag),
+    draft_rate = mean(draft_flag),
+    .groups = "drop"
+  )
+
+master_old %>%
+  group_by(rsci_tier, secondgen) %>%
+  summarise(
+    draft_rate = mean(draft_flag),
     .groups = "drop"
   )
 
@@ -904,18 +976,25 @@ master %>%
   group_by(rsci_tier, secondgen) %>%
   summarise(
     n = n(),
-    drafted = sum(drafted_flag),
-    draft_rate = mean(drafted_flag),
+    drafted = sum(draft_flag),
+    draft_rate = mean(draft_flag),
     .groups = "drop"
   )
 
-
+master_old %>%
+  group_by(rsci_tier, secondgen) %>%
+  summarise(
+    n = n(),
+    drafted = sum(draft_flag),
+    draft_rate = mean(draft_flag),
+    .groups = "drop"
+  )
 
 
 ################ Earnings ################
 
 earnings <- master %>%
-  filter(nba_flag == 1) %>%
+  filter(draft_flag == 1) %>%
   group_by(secondgen) %>%
   summarise(
     
@@ -933,27 +1012,62 @@ earnings <- master %>%
     
   )
 
+earnings_b <- master_old %>%
+  filter(draft_flag == 1) %>%
+  group_by(secondgen) %>%
+  summarise(
+    
+    mean_earnings =
+      mean(
+        adj_car_earn,
+        na.rm = TRUE
+      ),
+    
+    median_earnings =
+      median(
+        adj_car_earn,
+        na.rm = TRUE
+      )
+    
+  )
+
+
 print(earnings)
+print(earnings_b)
 
 
 ################ Regressions ################
 
 draft_model <- glm(
-  drafted_flag ~ secondgen + rsci,
+  draft_flag ~ secondgen + rsci,
   family = binomial,
   data = master
+)
+
+draft_model_b <- glm(
+  draft_flag ~ secondgen + rsci,
+  family = binomial,
+  data = master_old
 )
 
 summary(draft_model)
+summary(draft_model_b)
 
 
 nba_model <- glm(
-  nba_flag ~ secondgen + rsci,
+  draft_flag ~ secondgen + rsci,
   family = binomial,
   data = master
 )
 
+nba_model_b <- glm(
+  draft_flag ~ secondgen + rsci,
+  family = binomial,
+  data = master_old
+)
+
 summary(nba_model)
+summary(nba_model_b)
 
 
 ws_model <- lm(
@@ -961,42 +1075,80 @@ ws_model <- lm(
   data =
     master %>%
     filter(
-      nba_flag == 1
+      draft_flag == 1
+    )
+)
+
+ws_model_b <- lm(
+  nba_ws ~ secondgen + rsci,
+  data =
+    master_old %>%
+    filter(
+      draft_flag == 1
     )
 )
 
 summary(ws_model)
+summary(ws_model_b)
 
 master <- master %>%
   mutate(
     top25 = ifelse(rsci <= 25, 1, 0)
   )
 
+master_old <- master_old %>%
+  mutate(
+    top25 = ifelse(rsci <= 25, 1, 0)
+  )
+
 nba_model2 <- glm(
-  nba_flag ~ secondgen + top25,
+  draft_flag ~ secondgen + top25,
   family = binomial,
   data = master
+)
+
+nba_model2_b <- glm(
+  draft_flag ~ secondgen + top25,
+  family = binomial,
+  data = master_old
 )
 
 summary(nba_model2)
+summary(nba_model2_b)
+
 
 nba_model3 <- glm(
-  nba_flag ~ secondgen + factor(rsci_tier),
+  draft_flag ~ secondgen + factor(rsci_tier),
   family = binomial,
   data = master
+)
+
+nba_model3_b <- glm(
+  draft_flag ~ secondgen + factor(rsci_tier),
+  family = binomial,
+  data = master_old
 )
 
 summary(nba_model3)
+summary(nba_model3_b)
 
 nba_model4 <- glm(
-  nba_flag ~ secondgen*factor(rsci_tier),
+  draft_flag ~ secondgen*factor(rsci_tier),
   family = binomial,
   data = master
 )
 
-summary(nba_model4)
+nba_model4_b <- glm(
+  draft_flag ~ secondgen*factor(rsci_tier),
+  family = binomial,
+  data = master_old
+)
 
-#among rsci ranked recruits from 1998-2025, second generation players reached
+summary(nba_model4)
+summary(nba_model4_b)
+
+
+#among rsci ranked recruits from 1998-2025, second generation players drafted into
 #the nba at substantially higher rates than comparable recruits
 #this relationship remained statistically significant after controlling
 #for recruiting rank and recruiting tier classification
@@ -1022,7 +1174,28 @@ master %>%
     sprint = mean(sprint, na.rm = TRUE)
   )
 
-master_combine <- master %>%
+master_old %>%
+  group_by(secondgen) %>%
+  summarise(
+    n_players = n(),
+    height_obs = sum(!is.na(hgt)),
+    wingspan_obs = sum(!is.na(wngspn)),
+    vert_obs = sum(!is.na(lpvert)),
+    sprint_obs = sum(!is.na(sprint))
+  )
+
+master_old %>%
+  group_by(secondgen) %>%
+  summarise(
+    height = mean(hgt, na.rm = TRUE),
+    wingspan = mean(wngspn, na.rm = TRUE),
+    vert = mean(lpvert, na.rm = TRUE),
+    sprint = mean(sprint, na.rm = TRUE)
+  )
+
+
+
+master_combine <- master_old %>%
   filter(!is.na(hgt))
 
 master_combine %>%
@@ -1048,7 +1221,7 @@ master_combine %>%
   )
 
 nba_model5 <- glm(
-  nba_flag ~
+  draft_flag ~
     secondgen +
     factor(rsci_tier) +
     hgt +
@@ -1062,7 +1235,7 @@ nba_model5 <- glm(
 summary(nba_model5)
 
 nba_model6 <- glm(
-  nba_flag ~
+  draft_flag ~
     secondgen +
     factor(rsci_tier),
   family = binomial,
@@ -1072,23 +1245,19 @@ nba_model6 <- glm(
 summary(nba_model6)
 
 
-master_old <- master %>%
-  filter(hs_class <= 2020)
-
-
 nba_model7 <- glm(
-  nba_flag ~
+  draft_flag ~
     secondgen +
     factor(rsci_tier) +
     factor(hs_class),
   family = binomial,
-  data = master
+  data = master_old
 )
 
 summary(nba_model7)
 
 nba_model7b <- glm(
-  nba_flag ~
+  draft_flag ~
     secondgen +
     factor(rsci_tier) +
     factor(hs_class),
@@ -1122,7 +1291,7 @@ master_combine %>%
 
 nba_model8 <- glm(
   
-  nba_flag ~
+  draft_flag ~
     
     secondgen +
     factor(rsci_tier) +
@@ -1140,7 +1309,7 @@ exp(coef(nba_model8))
 
 nba_model9 <- glm(
   
-  nba_flag ~
+  draft_flag ~
     
     secondgen +
     factor(rsci_tier) +
@@ -1177,8 +1346,8 @@ summary(combine_model)
 
 ####### productivity models ########
 
-nba_players <- master %>%
-  filter(nba_flag == 1)
+nba_players <- master_old %>%
+  filter(draft_flag == 1)
 
 ws_model <- lm(
   nba_ws ~
@@ -1237,7 +1406,7 @@ nba_players <- master_old %>%
 
 
 nba_players <- master_old |>
-  filter(nba_flag == 1) |>
+  filter(draft_flag == 1) |>
   dplyr::mutate(
     event =
       ifelse(
@@ -1289,10 +1458,10 @@ cox_model <- coxph(
 
 summary(cox_model)
 
-##### bonus:  backing out probabilities of playing in the nba based solely on rsci ran####
+##### bonus:  backing out probabilities of being drafted into the nba based solely on rsci ran####
 
 nba_probit <- glm(
-  nba_flag ~ rsci,
+  draft_flag ~ rsci,
   family = binomial(link = "probit"),
   data = master_old
 )
@@ -1324,12 +1493,12 @@ ggplot(
   geom_line(size = 1.2) +
   labs(
     x = "RSCI Rank",
-    y = "Estimated Probability of NBA Career",
-    title = "Predicted NBA Probability by RSCI Rank"
+    y = "Estimated Probability of Being Drafted into NBA",
+    title = "Predicted NBA Draft Probability by RSCI Rank"
   )
 
 nba_probit2 <- glm(
-  nba_flag ~ rsci + secondgen,
+  draft_flag ~ rsci + secondgen,
   family = binomial(link = "probit"),
   data = master_old
 )
@@ -1338,6 +1507,13 @@ summary(nba_probit2)
 
 pR2(nba_probit)
 
+nba_probit3 <- glm(
+  draft_flag ~ secondgen + rsci + hgt + wngspn + lpvert + sprint,
+  family = binomial(link = "probit"),
+  data = master_old
+)
+
+summary(nba_probit2)
 
 pred_heir <- expand.grid(
   rsci = 1:100,
@@ -1360,6 +1536,7 @@ pred_nonheir$pr <- predict(
   newdata = pred_nonheir,
   type = "response"
 )
+
 
 
 library(dplyr)
@@ -1396,7 +1573,7 @@ ggplot(
     )
   ) +
   labs(
-    title = "Predicted Probability of Reaching the NBA",
+    title = "Predicted Probability of Being Drafted into the NBA",
     subtitle = "Probit model using RSCI rank and NBA lineage",
     x = "RSCI Rank (Lower = Better Recruit)",
     y = "Predicted NBA Probability",
@@ -1667,7 +1844,7 @@ ggplot(
 raw_rates <- master_old %>%
   group_by(rsci, secondgen) %>%
   summarise(
-    nba_rate = mean(nba_flag),
+    draft_rate = mean(draft_flag),
     n = n(),
     .groups = "drop"
   )
@@ -1680,7 +1857,7 @@ raw_rates <- raw_rates %>%
   mutate(
     smooth_rate =
       rollmean(
-        nba_rate,
+        draft_rate,
         k = 10,
         fill = NA,
         align = "center"
@@ -1693,7 +1870,7 @@ ggplot(
   raw_rates,
   aes(
     x = rsci,
-    y = nba_rate,
+    y = draft_rate,
     color = factor(secondgen)
   )
 ) +
@@ -1718,10 +1895,10 @@ ggplot(
   ) +
   scale_x_reverse() +
   labs(
-    title = "Observed NBA Transition Rates by RSCI Rank",
+    title = "Observed NBA Draft Rates by RSCI Rank",
     subtitle = "LOESS-smoothed empirical transition probabilities",
     x = "RSCI Rank (Lower = Better)",
-    y = "NBA Attainment Rate",
+    y = "NBA Draft Rate",
     color = NULL
   ) +
   theme_minimal(base_size = 14)
@@ -1734,7 +1911,7 @@ raw_rates_smooth <- raw_rates %>%
   mutate(
     smooth_rate =
       rollmean(
-        nba_rate,
+        draft_rate,
         k = 10,
         fill = NA,
         align = "center"
@@ -1772,3 +1949,14 @@ ggplot(
     color = NULL
   ) +
   theme_minimal(base_size = 14)
+
+missing_money <- nba_players %>%
+  filter(is.na(adj_car_earn)) %>%
+  select(player) %>%
+  left_join(
+    money %>% select(player, adj_car_earn),
+    by = "player"
+  )
+
+missing_earnings %>%
+  filter(is.na(adj_car_earn))

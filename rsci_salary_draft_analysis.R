@@ -38,8 +38,9 @@ colnames(secondgen) <- lapply(colnames(secondgen), scrub)
 secondgen <- lapply(secondgen, scrub)
 secondgen <- as.data.frame(secondgen)
 
-# based on what i can tell there's only a few problem rows: 2, 15, 16, 29, 34, 60, 63, 87--row 2 needs two extra rows after it
-prob_rows <- c(2, 15:16, 29, 34, 60, 63, 87)
+# based on what i can tell there's only a few problem rows: 2, 17, 18, 31, 36, 62, 65, 89--row 2 needs two extra rows after it
+# and row 17 needs another row after it
+prob_rows <- c(2, 17:18, 31, 36, 62, 65, 89)
 print(secondgen[prob_rows,])
 
 secondgen <- secondgen |>
